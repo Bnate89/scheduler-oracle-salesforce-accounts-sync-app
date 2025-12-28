@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<munit:config name="oracle-fetch-subflow-test-suite.xml"/>
+
+	<!-- Test: Oracle Fetch Returns Records -->
+	<munit:test name="oracle-fetch-returns-records-test" 
+		doc:id="test-oracle-fetch-success"
+		description="Test Oracle fetch subflow returns records successfully">
+		
+		<munit:behavior>
+			<!-- Mock Oracle Database Select -->
+			<munit-tools:mock-when processor="db:select" doc:name="Mock Oracle Select">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Select Oracle Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{
+							ACCOUNT_ID: 'ACC001',
+							ACCOUNT_NAME: 'Test Account 1',
+							ACCOUNT_NUMBER: '12345',
+							ACCOUNT_TYPE: 'Customer',
+							INDUSTRY: 'Technology',
+							ANNUAL_REVENUE: 1000000,
+							NUMBER_OF_EMPLOYEES: 100,
+							PHONE: '555-1234',
+							FAX: '555-5678',
+							WEBSITE: 'https://test1.com',
+							DESCRIPTION: 'Test account 1',
+							BILLING_STREET: '123 Main St',
+							BILLING_CITY: 'San Francisco',
+							BILLING_STATE: 'CA',
+							BILLING_POSTAL_CODE: '94105',
+							BILLING_COUNTRY: 'USA',
+							SHIPPING_STREET: '123 Main St',
+							SHIPPING_CITY: 'San Francisco',
+							SHIPPING_STATE: 'CA',
+							SHIPPING_POSTAL_CODE: '94105',
+							SHIPPING_COUNTRY: 'USA',
+							LAST_UPDATED_DATE: '2024-01-15T10:30:00Z',
+							CREATED_DATE: '2023-01-01T00:00:00Z',
+							STATUS: 'ACTIVE'
+						}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-variable variableName="lastWatermark" value="2024-01-01T00:00:00Z" doc:name="Set Watermark"/>
+			<flow-ref name="sub-flow-fetch-oracle-accounts" doc:name="Execute Oracle Fetch"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Records Returned" 
+				expression="#[sizeOf(payload)]" 
+				is="#[MunitTools::greaterThan(0)]"/>
+			<munit-tools:assert-that doc:name="Assert Account ID Present" 
+				expression="#[payload[0].ACCOUNT_ID]" 
+				is="#[MunitTools::equalTo('ACC001')]"/>
+			<munit-tools:verify-call processor="db:select" times="1" doc:name="Verify DB Select Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Oracle Fetch Returns Empty -->
+	<munit:test name="oracle-fetch-returns-empty-test" 
+		doc:id="test-oracle-fetch-empty"
+		description="Test Oracle fetch subflow returns empty when no records match">
+		
+		<munit:behavior>
+			<!-- Mock Oracle Database Select - Empty Result -->
+			<munit-tools:mock-when processor="db:select" doc:name="Mock Oracle Select Empty">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Select Oracle Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-variable variableName="lastWatermark" value="2024-12-31T23:59:59Z" doc:name="Set Future Watermark"/>
+			<flow-ref name="sub-flow-fetch-oracle-accounts" doc:name="Execute Oracle Fetch"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Empty Result" 
+				expression="#[sizeOf(payload)]" 
+				is="#[MunitTools::equalTo(0)]"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Oracle Fetch Database Error -->
+	<munit:test name="oracle-fetch-database-error-test" 
+		doc:id="test-oracle-fetch-error"
+		description="Test Oracle fetch subflow handles database connectivity error"
+		expectedErrorType="DB:CONNECTIVITY">
+		
+		<munit:behavior>
+			<!-- Mock Oracle Database Select - Throws Error -->
+			<munit-tools:mock-when processor="db:select" doc:name="Mock Oracle Select Error">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Select Oracle Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="DB:CONNECTIVITY"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-variable variableName="lastWatermark" value="2024-01-01T00:00:00Z" doc:name="Set Watermark"/>
+			<flow-ref name="sub-flow-fetch-oracle-accounts" doc:name="Execute Oracle Fetch"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="db:select" times="1" doc:name="Verify DB Select Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Oracle Fetch Multiple Records -->
+	<munit:test name="oracle-fetch-multiple-records-test" 
+		doc:id="test-oracle-fetch-multiple"
+		description="Test Oracle fetch subflow returns multiple records">
+		
+		<munit:behavior>
+			<!-- Mock Oracle Database Select - Multiple Records -->
+			<munit-tools:mock-when processor="db:select" doc:name="Mock Oracle Select Multiple">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Select Oracle Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{ACCOUNT_ID: 'ACC001', ACCOUNT_NAME: 'Account 1', ACCOUNT_NUMBER: '001', ACCOUNT_TYPE: 'Customer', INDUSTRY: 'Tech', ANNUAL_REVENUE: 100000, NUMBER_OF_EMPLOYEES: 10, PHONE: '111', FAX: '111', WEBSITE: 'http://1.com', DESCRIPTION: 'Desc 1', BILLING_STREET: 'St 1', BILLING_CITY: 'City 1', BILLING_STATE: 'ST', BILLING_POSTAL_CODE: '11111', BILLING_COUNTRY: 'USA', SHIPPING_STREET: 'St 1', SHIPPING_CITY: 'City 1', SHIPPING_STATE: 'ST', SHIPPING_POSTAL_CODE: '11111', SHIPPING_COUNTRY: 'USA', LAST_UPDATED_DATE: '2024-01-15T10:00:00Z', CREATED_DATE: '2023-01-01T00:00:00Z', STATUS: 'ACTIVE'},
+						{ACCOUNT_ID: 'ACC002', ACCOUNT_NAME: 'Account 2', ACCOUNT_NUMBER: '002', ACCOUNT_TYPE: 'Prospect', INDUSTRY: 'Finance', ANNUAL_REVENUE: 200000, NUMBER_OF_EMPLOYEES: 20, PHONE: '222', FAX: '222', WEBSITE: 'http://2.com', DESCRIPTION: 'Desc 2', BILLING_STREET: 'St 2', BILLING_CITY: 'City 2', BILLING_STATE: 'ST', BILLING_POSTAL_CODE: '22222', BILLING_COUNTRY: 'USA', SHIPPING_STREET: 'St 2', SHIPPING_CITY: 'City 2', SHIPPING_STATE: 'ST', SHIPPING_POSTAL_CODE: '22222', SHIPPING_COUNTRY: 'USA', LAST_UPDATED_DATE: '2024-01-16T11:00:00Z', CREATED_DATE: '2023-02-01T00:00:00Z', STATUS: 'ACTIVE'},
+						{ACCOUNT_ID: 'ACC003', ACCOUNT_NAME: 'Account 3', ACCOUNT_NUMBER: '003', ACCOUNT_TYPE: 'Partner', INDUSTRY: 'Healthcare', ANNUAL_REVENUE: 300000, NUMBER_OF_EMPLOYEES: 30, PHONE: '333', FAX: '333', WEBSITE: 'http://3.com', DESCRIPTION: 'Desc 3', BILLING_STREET: 'St 3', BILLING_CITY: 'City 3', BILLING_STATE: 'ST', BILLING_POSTAL_CODE: '33333', BILLING_COUNTRY: 'USA', SHIPPING_STREET: 'St 3', SHIPPING_CITY: 'City 3', SHIPPING_STATE: 'ST', SHIPPING_POSTAL_CODE: '33333', SHIPPING_COUNTRY: 'USA', LAST_UPDATED_DATE: '2024-01-17T12:00:00Z', CREATED_DATE: '2023-03-01T00:00:00Z', STATUS: 'ACTIVE'}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-variable variableName="lastWatermark" value="2024-01-01T00:00:00Z" doc:name="Set Watermark"/>
+			<flow-ref name="sub-flow-fetch-oracle-accounts" doc:name="Execute Oracle Fetch"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Three Records" 
+				expression="#[sizeOf(payload)]" 
+				is="#[MunitTools::equalTo(3)]"/>
+			<munit-tools:assert-that doc:name="Assert First Account" 
+				expression="#[payload[0].ACCOUNT_ID]" 
+				is="#[MunitTools::equalTo('ACC001')]"/>
+			<munit-tools:assert-that doc:name="Assert Last Account" 
+				expression="#[payload[2].ACCOUNT_ID]" 
+				is="#[MunitTools::equalTo('ACC003')]"/>
+		</munit:validation>
+	</munit:test>
+
+</mule>

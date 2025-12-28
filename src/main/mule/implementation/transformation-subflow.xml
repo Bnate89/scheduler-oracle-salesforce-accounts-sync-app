@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- Sub-Flow: Transform Oracle Account to Salesforce Account -->
+	<sub-flow name="sub-flow-transform-oracle-to-salesforce" doc:name="Transform Oracle to Salesforce">
+		<ee:transform doc:name="Map Oracle to Salesforce Account">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	// External ID for Upsert
+	Oracle_Account_Id__c: payload.ACCOUNT_ID as String,
+	
+	// Standard Account Fields
+	Name: payload.ACCOUNT_NAME default "",
+	AccountNumber: payload.ACCOUNT_NUMBER default "",
+	"Type": payload.ACCOUNT_TYPE default "",
+	Industry: payload.INDUSTRY default "",
+	AnnualRevenue: payload.ANNUAL_REVENUE as Number default null,
+	NumberOfEmployees: payload.NUMBER_OF_EMPLOYEES as Number default null,
+	Phone: payload.PHONE default "",
+	Fax: payload.FAX default "",
+	Website: payload.WEBSITE default "",
+	Description: payload.DESCRIPTION default "",
+	
+	// Billing Address
+	BillingStreet: payload.BILLING_STREET default "",
+	BillingCity: payload.BILLING_CITY default "",
+	BillingState: payload.BILLING_STATE default "",
+	BillingPostalCode: payload.BILLING_POSTAL_CODE default "",
+	BillingCountry: payload.BILLING_COUNTRY default "",
+	
+	// Shipping Address
+	ShippingStreet: payload.SHIPPING_STREET default "",
+	ShippingCity: payload.SHIPPING_CITY default "",
+	ShippingState: payload.SHIPPING_STATE default "",
+	ShippingPostalCode: payload.SHIPPING_POSTAL_CODE default "",
+	ShippingCountry: payload.SHIPPING_COUNTRY default ""
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</sub-flow>
+
+	<!-- Sub-Flow: Transform Batch of Oracle Accounts to Salesforce Accounts -->
+	<sub-flow name="sub-flow-transform-batch-oracle-to-salesforce" doc:name="Transform Batch Oracle to Salesforce">
+		<ee:transform doc:name="Map Batch Oracle to Salesforce Accounts">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map (oracleAccount) -> {
+	// External ID for Upsert
+	Oracle_Account_Id__c: oracleAccount.ACCOUNT_ID as String,
+	
+	// Standard Account Fields
+	Name: oracleAccount.ACCOUNT_NAME default "",
+	AccountNumber: oracleAccount.ACCOUNT_NUMBER default "",
+	"Type": oracleAccount.ACCOUNT_TYPE default "",
+	Industry: oracleAccount.INDUSTRY default "",
+	AnnualRevenue: oracleAccount.ANNUAL_REVENUE as Number default null,
+	NumberOfEmployees: oracleAccount.NUMBER_OF_EMPLOYEES as Number default null,
+	Phone: oracleAccount.PHONE default "",
+	Fax: oracleAccount.FAX default "",
+	Website: oracleAccount.WEBSITE default "",
+	Description: oracleAccount.DESCRIPTION default "",
+	
+	// Billing Address
+	BillingStreet: oracleAccount.BILLING_STREET default "",
+	BillingCity: oracleAccount.BILLING_CITY default "",
+	BillingState: oracleAccount.BILLING_STATE default "",
+	BillingPostalCode: oracleAccount.BILLING_POSTAL_CODE default "",
+	BillingCountry: oracleAccount.BILLING_COUNTRY default "",
+	
+	// Shipping Address
+	ShippingStreet: oracleAccount.SHIPPING_STREET default "",
+	ShippingCity: oracleAccount.SHIPPING_CITY default "",
+	ShippingState: oracleAccount.SHIPPING_STATE default "",
+	ShippingPostalCode: oracleAccount.SHIPPING_POSTAL_CODE default "",
+	ShippingCountry: oracleAccount.SHIPPING_COUNTRY default ""
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</sub-flow>
+
+</mule>

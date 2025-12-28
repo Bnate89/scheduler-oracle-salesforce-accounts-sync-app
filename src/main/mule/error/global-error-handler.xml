@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+		http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+
+	<!-- Global Error Handler - Centralized Error Management -->
+	<error-handler name="Global_Error_Handler" doc:name="Global Error Handler">
+		
+		<!-- Database Connectivity Errors -->
+		<on-error-propagate type="DB:CONNECTIVITY, DB:RETRY_EXHAUSTED" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="DB Connectivity Error">
+			<set-variable variableName="errorCategory" value="DATABASE_CONNECTIVITY" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+		<!-- Database Query Errors -->
+		<on-error-propagate type="DB:BAD_SQL_SYNTAX, DB:QUERY_EXECUTION" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="DB Query Error">
+			<set-variable variableName="errorCategory" value="DATABASE_QUERY" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+		<!-- Salesforce Connectivity Errors -->
+		<on-error-propagate type="SALESFORCE:CONNECTIVITY, SALESFORCE:RETRY_EXHAUSTED" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="Salesforce Connectivity Error">
+			<set-variable variableName="errorCategory" value="SALESFORCE_CONNECTIVITY" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+		<!-- Salesforce Data Errors -->
+		<on-error-propagate type="SALESFORCE:INVALID_INPUT, SALESFORCE:NOT_FOUND" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="Salesforce Data Error">
+			<set-variable variableName="errorCategory" value="SALESFORCE_DATA" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+		<!-- Transformation Errors -->
+		<on-error-propagate type="EXPRESSION, MULE:EXPRESSION" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="Transformation Error">
+			<set-variable variableName="errorCategory" value="TRANSFORMATION" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+		<!-- Scheduler/Lock Errors -->
+		<on-error-propagate type="OS:KEY_ALREADY_EXISTS, OS:KEY_NOT_FOUND" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="Object Store Error">
+			<set-variable variableName="errorCategory" value="SCHEDULER_LOCK" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+		<!-- Generic Fallback Error Handler -->
+		<on-error-propagate type="ANY" 
+			enableNotifications="true" 
+			logException="true" 
+			doc:name="Generic Error">
+			<set-variable variableName="errorCategory" value="UNKNOWN" doc:name="Set Error Category"/>
+			<flow-ref name="sub-flow-structured-error-logging" doc:name="Log Structured Error"/>
+		</on-error-propagate>
+
+	</error-handler>
+
+	<!-- Structured Error Logging Sub-Flow -->
+	<sub-flow name="sub-flow-structured-error-logging" doc:name="Structured Error Logging">
+		<ee:transform doc:name="Build Structured Error Log">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	correlationId: vars.correlationId default correlationId,
+	timestamp: now() as String {format: "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+	application: "oracle-salesforce-accounts-sync",
+	errorCategory: vars.errorCategory default "UNKNOWN",
+	error: {
+		"type": (error.errorType.namespace default "MULE") ++ ":" ++ (error.errorType.identifier default "UNKNOWN"),
+		description: error.description default "No description available",
+		detailedDescription: error.detailedDescription default "",
+		cause: error.cause.message default ""
+	},
+	context: {
+		flowName: flow.name default "unknown",
+		processorPath: vars.processorPath default "",
+		lastWatermark: vars.lastWatermark default "",
+		recordsProcessed: vars.recordsProcessed default 0,
+		recordsFailed: vars.recordsFailed default 0
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="ERROR" 
+			doc:name="Log Structured Error" 
+			message="#[payload]" 
+			category="${logging.category}"/>
+	</sub-flow>
+
+	<!-- Dead Letter Logging Sub-Flow -->
+	<sub-flow name="sub-flow-dead-letter-logging" doc:name="Dead Letter Logging">
+		<ee:transform doc:name="Build Dead Letter Record">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	correlationId: vars.correlationId default correlationId,
+	timestamp: now() as String {format: "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+	failedRecord: vars.failedRecord default payload,
+	error: {
+		"type": (error.errorType.namespace default "MULE") ++ ":" ++ (error.errorType.identifier default "UNKNOWN"),
+		description: error.description default "No description available"
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<os:store doc:name="Store Dead Letter" 
+			key="#[vars.correlationId ++ '-' ++ uuid()]" 
+			objectStore="DeadLetter_Object_Store">
+			<os:value><![CDATA[#[payload]]]></os:value>
+		</os:store>
+		<logger level="ERROR" 
+			doc:name="Log Dead Letter" 
+			message="Dead letter record stored: #[payload]" 
+			category="${logging.category}"/>
+	</sub-flow>
+
+</mule>

@@ -1,0 +1,14 @@
+# Oracle to Salesforce Accounts Incremental Sync - Secure Configuration
+# Sensitive configuration properties - values should be encrypted using Secure Properties Tool
+# Example: java -cp secure-properties-tool.jar com.mulesoft.tools.SecurePropertiesTool string encrypt AES CBC <key> <value>
+
+# Oracle Database Credentials
+oracle:
+  user: "![encrypted_oracle_username]"
+  password: "![encrypted_oracle_password]"
+
+# Salesforce Credentials
+salesforce:
+  username: "![encrypted_sf_username]"
+  password: "![encrypted_sf_password]"
+  token: "![encrypted_sf_security_token]"

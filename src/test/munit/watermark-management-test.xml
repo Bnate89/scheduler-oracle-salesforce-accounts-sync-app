@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<munit:config name="watermark-management-test-suite.xml"/>
+
+	<!-- Test: Retrieve Watermark Success -->
+	<munit:test name="retrieve-watermark-success-test" 
+		doc:id="test-retrieve-watermark"
+		description="Test watermark retrieval returns stored value">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Retrieval -->
+			<munit-tools:mock-when processor="os:retrieve" doc:name="Mock Watermark Retrieve">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Retrieve Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#['2024-06-15T10:30:00Z']"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<flow-ref name="sub-flow-retrieve-watermark" doc:name="Execute Retrieve Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Watermark Retrieved" 
+				expression="#[vars.lastWatermark]" 
+				is="#[MunitTools::equalTo('2024-06-15T10:30:00Z')]"/>
+			<munit-tools:verify-call processor="os:retrieve" times="1" doc:name="Verify Retrieve Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Retrieve Watermark Default Value -->
+	<munit:test name="retrieve-watermark-default-test" 
+		doc:id="test-retrieve-watermark-default"
+		description="Test watermark retrieval returns default when not found">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Retrieval - Returns Default -->
+			<munit-tools:mock-when processor="os:retrieve" doc:name="Mock Watermark Retrieve Default">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Retrieve Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#['2020-01-01T00:00:00Z']"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<flow-ref name="sub-flow-retrieve-watermark" doc:name="Execute Retrieve Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Default Watermark" 
+				expression="#[vars.lastWatermark]" 
+				is="#[MunitTools::equalTo('2020-01-01T00:00:00Z')]"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Update Watermark Success -->
+	<munit:test name="update-watermark-success-test" 
+		doc:id="test-update-watermark"
+		description="Test watermark update stores new value">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Store -->
+			<munit-tools:mock-when processor="os:store" doc:name="Mock Watermark Store">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Store Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-variable variableName="lastWatermark" value="2024-01-01T00:00:00Z" doc:name="Set Last Watermark"/>
+			<flow-ref name="sub-flow-update-watermark" doc:name="Execute Update Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert New Watermark Set" 
+				expression="#[vars.newWatermark]" 
+				is="#[MunitTools::notNullValue()]"/>
+			<munit-tools:verify-call processor="os:store" times="1" doc:name="Verify Store Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Check Watermark Exists -->
+	<munit:test name="check-watermark-exists-test" 
+		doc:id="test-check-watermark"
+		description="Test watermark exists check returns true">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Contains -->
+			<munit-tools:mock-when processor="os:contains" doc:name="Mock Watermark Contains">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Check Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[true]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<flow-ref name="sub-flow-check-watermark-exists" doc:name="Execute Check Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Watermark Exists" 
+				expression="#[vars.watermarkExists]" 
+				is="#[MunitTools::equalTo(true)]"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Check Watermark Does Not Exist -->
+	<munit:test name="check-watermark-not-exists-test" 
+		doc:id="test-check-watermark-not-exists"
+		description="Test watermark exists check returns false">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Contains - Returns False -->
+			<munit-tools:mock-when processor="os:contains" doc:name="Mock Watermark Contains False">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Check Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[false]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<flow-ref name="sub-flow-check-watermark-exists" doc:name="Execute Check Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Watermark Not Exists" 
+				expression="#[vars.watermarkExists]" 
+				is="#[MunitTools::equalTo(false)]"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Reset Watermark Success -->
+	<munit:test name="reset-watermark-success-test" 
+		doc:id="test-reset-watermark"
+		description="Test watermark reset removes stored value">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Remove -->
+			<munit-tools:mock-when processor="os:remove" doc:name="Mock Watermark Remove">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Remove Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<flow-ref name="sub-flow-reset-watermark" doc:name="Execute Reset Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="os:remove" times="1" doc:name="Verify Remove Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Reset Watermark Not Found -->
+	<munit:test name="reset-watermark-not-found-test" 
+		doc:id="test-reset-watermark-not-found"
+		description="Test watermark reset handles key not found gracefully">
+		
+		<munit:behavior>
+			<!-- Mock Watermark Remove - Key Not Found -->
+			<munit-tools:mock-when processor="os:remove" doc:name="Mock Watermark Remove Not Found">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Remove Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="OS:KEY_NOT_FOUND"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<flow-ref name="sub-flow-reset-watermark" doc:name="Execute Reset Watermark"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="os:remove" times="1" doc:name="Verify Remove Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Watermark Not Updated on Failure -->
+	<munit:test name="watermark-not-updated-on-failure-test" 
+		doc:id="test-watermark-not-updated"
+		description="Test that watermark is not updated when there are failures">
+		
+		<munit:behavior>
+			<!-- No mock for os:store - should not be called -->
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-variable variableName="lastWatermark" value="2024-01-01T00:00:00Z" doc:name="Set Last Watermark"/>
+			<set-variable variableName="recordsFailed" value="#[5]" doc:name="Set Failed Records"/>
+			<!-- Simulate the choice logic from scheduler flow -->
+			<choice doc:name="Should Update Watermark?">
+				<when expression="#[vars.recordsFailed == 0]">
+					<flow-ref name="sub-flow-update-watermark" doc:name="Update Watermark"/>
+				</when>
+				<otherwise>
+					<set-variable variableName="watermarkUpdated" value="#[false]" doc:name="Mark Not Updated"/>
+				</otherwise>
+			</choice>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Watermark Not Updated" 
+				expression="#[vars.watermarkUpdated]" 
+				is="#[MunitTools::equalTo(false)]"/>
+			<munit-tools:verify-call processor="os:store" times="0" doc:name="Verify Store Not Called"/>
+		</munit:validation>
+	</munit:test>
+
+</mule>

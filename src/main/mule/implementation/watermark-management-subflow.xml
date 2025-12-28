@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- Sub-Flow: Retrieve Watermark -->
+	<sub-flow name="sub-flow-retrieve-watermark" doc:name="Retrieve Watermark">
+		<os:retrieve doc:name="Retrieve Watermark" 
+			key="${watermark.key}" 
+			objectStore="Watermark_Object_Store" 
+			target="lastWatermark">
+			<os:default-value><![CDATA[#["${watermark.defaultDate}"]]]></os:default-value>
+		</os:retrieve>
+		
+		<logger level="INFO" 
+			doc:name="Log Watermark Retrieved" 
+			message='#["[" ++ vars.correlationId ++ "] Retrieved watermark: " ++ vars.lastWatermark]' 
+			category="${logging.category}"/>
+	</sub-flow>
+
+	<!-- Sub-Flow: Update Watermark -->
+	<sub-flow name="sub-flow-update-watermark" doc:name="Update Watermark">
+		<!-- Set new watermark to current time -->
+		<set-variable variableName="newWatermark" 
+			value='#[now() as String {format: "yyyy-MM-dd\'T\'HH:mm:ss\'Z\'"}]' 
+			doc:name="Set New Watermark"/>
+		
+		<os:store doc:name="Store Watermark" 
+			key="${watermark.key}" 
+			objectStore="Watermark_Object_Store">
+			<os:value><![CDATA[#[vars.newWatermark]]]></os:value>
+		</os:store>
+		
+		<logger level="INFO" 
+			doc:name="Log Watermark Updated" 
+			message='#["[" ++ vars.correlationId ++ "] Watermark updated from " ++ vars.lastWatermark ++ " to " ++ vars.newWatermark]' 
+			category="${logging.category}"/>
+	</sub-flow>
+
+	<!-- Sub-Flow: Check Watermark Exists -->
+	<sub-flow name="sub-flow-check-watermark-exists" doc:name="Check Watermark Exists">
+		<os:contains doc:name="Check Watermark" 
+			key="${watermark.key}" 
+			objectStore="Watermark_Object_Store" 
+			target="watermarkExists"/>
+		
+		<logger level="DEBUG" 
+			doc:name="Log Watermark Check" 
+			message='#["[" ++ vars.correlationId ++ "] Watermark exists: " ++ vars.watermarkExists]' 
+			category="${logging.category}"/>
+	</sub-flow>
+
+	<!-- Sub-Flow: Reset Watermark (for manual intervention) -->
+	<sub-flow name="sub-flow-reset-watermark" doc:name="Reset Watermark">
+		<try doc:name="Try Reset Watermark">
+			<os:remove doc:name="Remove Watermark" 
+				key="${watermark.key}" 
+				objectStore="Watermark_Object_Store"/>
+			
+			<logger level="INFO" 
+				doc:name="Log Watermark Reset" 
+				message='#["[" ++ vars.correlationId ++ "] Watermark reset successfully"]' 
+				category="${logging.category}"/>
+			
+			<error-handler>
+				<on-error-continue type="OS:KEY_NOT_FOUND" doc:name="Key Not Found">
+					<logger level="WARN" 
+						doc:name="Log No Watermark" 
+						message='#["[" ++ vars.correlationId ++ "] No watermark found to reset"]' 
+						category="${logging.category}"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+
+</mule>

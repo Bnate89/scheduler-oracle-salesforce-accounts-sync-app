@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+		http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+		http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd">
+
+	<!-- Main Scheduler Flow - Oracle to Salesforce Accounts Incremental Sync -->
+	<flow name="oracle-salesforce-accounts-sync-scheduler-flow" 
+		doc:name="Oracle Salesforce Accounts Sync Scheduler" 
+		initialState="${scheduler.state}" 
+		maxConcurrency="1">
+		
+		<!-- Scheduler Trigger with Cron Expression -->
+		<scheduler doc:name="Accounts Sync Scheduler" disallowConcurrentExecution="true">
+			<scheduling-strategy>
+				<cron expression="${scheduler.cron.expression}" timeZone="${scheduler.cron.timezone}"/>
+			</scheduling-strategy>
+		</scheduler>
+
+		<!-- Initialize Correlation ID and Start Time -->
+		<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+		<set-variable variableName="syncStartTime" value="#[now()]" doc:name="Set Sync Start Time"/>
+		<set-variable variableName="recordsProcessed" value="#[0]" doc:name="Initialize Records Processed"/>
+		<set-variable variableName="recordsFailed" value="#[0]" doc:name="Initialize Records Failed"/>
+
+		<!-- Log Scheduler Start -->
+		<logger level="INFO" 
+			doc:name="Log Scheduler Start" 
+			message='#["[" ++ vars.correlationId ++ "] Oracle-Salesforce Accounts Sync STARTED at " ++ (vars.syncStartTime as String {format: "yyyy-MM-dd HH:mm:ss"})]' 
+			category="${logging.category}"/>
+
+		<!-- Acquire Execution Lock -->
+		<flow-ref name="sub-flow-acquire-execution-lock" doc:name="Acquire Execution Lock"/>
+
+		<!-- Check if Lock Acquired -->
+		<choice doc:name="Lock Acquired?">
+			<when expression="#[vars.lockAcquired == true]">
+				
+				<!-- Try Block for Main Processing -->
+				<try doc:name="Main Processing Try Block">
+					
+					<!-- Retrieve Watermark -->
+					<flow-ref name="sub-flow-retrieve-watermark" doc:name="Retrieve Watermark"/>
+
+					<!-- Fetch Oracle Records -->
+					<flow-ref name="sub-flow-fetch-oracle-accounts" doc:name="Fetch Oracle Accounts"/>
+
+					<!-- Check if Records Found -->
+					<choice doc:name="Records Found?">
+						<when expression="#[sizeOf(payload) > 0]">
+							<set-variable variableName="totalRecords" value="#[sizeOf(payload)]" doc:name="Set Total Records"/>
+							<logger level="INFO" 
+								doc:name="Log Records Found" 
+								message='#["[" ++ vars.correlationId ++ "] Found " ++ vars.totalRecords ++ " records to process"]' 
+								category="${logging.category}"/>
+
+							<!-- Batch Processing for Large Datasets -->
+							<batch:job jobName="oracle-salesforce-accounts-batch" 
+								doc:name="Oracle Salesforce Accounts Batch" 
+								blockSize="${batch.blockSize}">
+								
+								<batch:process-records>
+									
+									<!-- Step 1: Transform and Upsert -->
+									<batch:step name="transform-and-upsert-step" 
+										doc:name="Transform and Upsert Step" 
+										acceptPolicy="NO_FAILURES">
+										
+										<!-- Transform Oracle Record to Salesforce Account -->
+										<flow-ref name="sub-flow-transform-oracle-to-salesforce" doc:name="Transform to Salesforce"/>
+
+										<!-- Batch Aggregator for Bulk Upsert -->
+										<batch:aggregator doc:name="Bulk Upsert Aggregator" size="${batch.size}">
+											<flow-ref name="sub-flow-upsert-salesforce-accounts" doc:name="Upsert to Salesforce"/>
+										</batch:aggregator>
+									</batch:step>
+
+									<!-- Step 2: Handle Failed Records -->
+									<batch:step name="handle-failures-step" 
+										doc:name="Handle Failures Step" 
+										acceptPolicy="ONLY_FAILURES">
+										<set-variable variableName="failedRecord" value="#[payload]" doc:name="Set Failed Record"/>
+										<flow-ref name="sub-flow-dead-letter-logging" doc:name="Log Dead Letter"/>
+									</batch:step>
+
+								</batch:process-records>
+
+								<!-- On Complete: Update Watermark and Log Summary -->
+								<batch:on-complete>
+									<set-variable variableName="recordsProcessed" value="#[payload.successfulRecords]" doc:name="Set Records Processed"/>
+									<set-variable variableName="recordsFailed" value="#[payload.failedRecords]" doc:name="Set Records Failed"/>
+									
+									<!-- Update Watermark Only on Success -->
+									<choice doc:name="Update Watermark?">
+										<when expression="#[payload.failedRecords == 0]">
+											<flow-ref name="sub-flow-update-watermark" doc:name="Update Watermark"/>
+										</when>
+										<otherwise>
+											<logger level="WARN" 
+												doc:name="Log Watermark Not Updated" 
+												message='#["[" ++ vars.correlationId ++ "] Watermark NOT updated due to " ++ vars.recordsFailed ++ " failed records"]' 
+												category="${logging.category}"/>
+										</otherwise>
+									</choice>
+
+									<!-- Log Batch Summary -->
+									<ee:transform doc:name="Build Batch Summary">
+										<ee:message>
+											<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	correlationId: vars.correlationId,
+	batchJobId: payload.id default "",
+	totalRecords: payload.totalRecords default 0,
+	successfulRecords: payload.successfulRecords default 0,
+	failedRecords: payload.failedRecords default 0,
+	elapsedTimeMs: payload.elapsedTimeInMillis default 0,
+	loadedRecords: payload.loadedRecords default 0
+}]]></ee:set-payload>
+										</ee:message>
+									</ee:transform>
+									<logger level="INFO" 
+										doc:name="Log Batch Summary" 
+										message='#["[" ++ vars.correlationId ++ "] Batch Summary: " ++ write(payload, "application/json")]' 
+										category="${logging.category}"/>
+								</batch:on-complete>
+
+							</batch:job>
+						</when>
+						<otherwise>
+							<logger level="INFO" 
+								doc:name="Log No Records" 
+								message='#["[" ++ vars.correlationId ++ "] No new records found to sync"]' 
+								category="${logging.category}"/>
+						</otherwise>
+					</choice>
+
+					<error-handler>
+						<on-error-propagate type="ANY" doc:name="On Error Propagate">
+							<logger level="ERROR" 
+								doc:name="Log Processing Error" 
+								message='#["[" ++ vars.correlationId ++ "] Error during sync processing: " ++ error.description]' 
+								category="${logging.category}"/>
+						</on-error-propagate>
+					</error-handler>
+				</try>
+
+				<!-- Release Execution Lock -->
+				<flow-ref name="sub-flow-release-execution-lock" doc:name="Release Execution Lock"/>
+
+			</when>
+			<otherwise>
+				<logger level="WARN" 
+					doc:name="Log Lock Not Acquired" 
+					message='#["[" ++ vars.correlationId ++ "] Scheduler execution skipped - another instance is running"]' 
+					category="${logging.category}"/>
+			</otherwise>
+		</choice>
+
+		<!-- Log Scheduler End -->
+		<set-variable variableName="syncEndTime" value="#[now()]" doc:name="Set Sync End Time"/>
+		<logger level="INFO" 
+			doc:name="Log Scheduler End" 
+			message='#["[" ++ vars.correlationId ++ "] Oracle-Salesforce Accounts Sync COMPLETED at " ++ (vars.syncEndTime as String {format: "yyyy-MM-dd HH:mm:ss"}) ++ " | Duration: " ++ ((vars.syncEndTime - vars.syncStartTime) as Number {unit: "seconds"}) ++ "s | Processed: " ++ vars.recordsProcessed ++ " | Failed: " ++ vars.recordsFailed]' 
+			category="${logging.category}"/>
+
+		<!-- Global Error Handler Reference -->
+		<error-handler ref="Global_Error_Handler"/>
+
+	</flow>
+
+	<!-- Sub-Flow: Acquire Execution Lock -->
+	<sub-flow name="sub-flow-acquire-execution-lock" doc:name="Acquire Execution Lock">
+		<try doc:name="Try Acquire Lock">
+			<os:store doc:name="Store Lock" 
+				key="${lock.key}" 
+				objectStore="Lock_Object_Store" 
+				failIfPresent="true">
+				<os:value><![CDATA[#[vars.correlationId]]]></os:value>
+			</os:store>
+			<set-variable variableName="lockAcquired" value="#[true]" doc:name="Lock Acquired"/>
+			<logger level="DEBUG" 
+				doc:name="Log Lock Acquired" 
+				message='#["[" ++ vars.correlationId ++ "] Execution lock acquired"]' 
+				category="${logging.category}"/>
+			<error-handler>
+				<on-error-continue type="OS:KEY_ALREADY_EXISTS" doc:name="Lock Already Exists">
+					<set-variable variableName="lockAcquired" value="#[false]" doc:name="Lock Not Acquired"/>
+					<logger level="DEBUG" 
+						doc:name="Log Lock Exists" 
+						message='#["[" ++ vars.correlationId ++ "] Execution lock already exists"]' 
+						category="${logging.category}"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+
+	<!-- Sub-Flow: Release Execution Lock -->
+	<sub-flow name="sub-flow-release-execution-lock" doc:name="Release Execution Lock">
+		<try doc:name="Try Release Lock">
+			<os:remove doc:name="Remove Lock" 
+				key="${lock.key}" 
+				objectStore="Lock_Object_Store"/>
+			<logger level="DEBUG" 
+				doc:name="Log Lock Released" 
+				message='#["[" ++ vars.correlationId ++ "] Execution lock released"]' 
+				category="${logging.category}"/>
+			<error-handler>
+				<on-error-continue type="OS:KEY_NOT_FOUND" doc:name="Lock Not Found">
+					<logger level="WARN" 
+						doc:name="Log Lock Not Found" 
+						message='#["[" ++ vars.correlationId ++ "] Execution lock not found during release"]' 
+						category="${logging.category}"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+
+</mule>

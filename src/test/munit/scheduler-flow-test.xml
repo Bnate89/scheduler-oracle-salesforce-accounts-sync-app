@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<munit:config name="scheduler-flow-test-suite.xml"/>
+
+	<!-- Test: Scheduler Flow Executes Successfully with Records -->
+	<munit:test name="scheduler-flow-success-with-records-test" 
+		doc:id="test-scheduler-success"
+		description="Test scheduler flow executes successfully when records are found">
+		
+		<munit:behavior>
+			<!-- Mock Lock Acquisition (Store) -->
+			<munit-tools:mock-when processor="os:store" doc:name="Mock Lock Store">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Store Lock" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Watermark Retrieval -->
+			<munit-tools:mock-when processor="os:retrieve" doc:name="Mock Watermark Retrieve">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Retrieve Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#['2024-01-01T00:00:00Z']"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Oracle Database Select -->
+			<munit-tools:mock-when processor="db:select" doc:name="Mock Oracle Select">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Select Oracle Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{
+							ACCOUNT_ID: 'ACC001',
+							ACCOUNT_NAME: 'Test Account 1',
+							ACCOUNT_NUMBER: '12345',
+							ACCOUNT_TYPE: 'Customer',
+							INDUSTRY: 'Technology',
+							ANNUAL_REVENUE: 1000000,
+							NUMBER_OF_EMPLOYEES: 100,
+							PHONE: '555-1234',
+							FAX: '555-5678',
+							WEBSITE: 'https://test1.com',
+							DESCRIPTION: 'Test account 1',
+							BILLING_STREET: '123 Main St',
+							BILLING_CITY: 'San Francisco',
+							BILLING_STATE: 'CA',
+							BILLING_POSTAL_CODE: '94105',
+							BILLING_COUNTRY: 'USA',
+							SHIPPING_STREET: '123 Main St',
+							SHIPPING_CITY: 'San Francisco',
+							SHIPPING_STATE: 'CA',
+							SHIPPING_POSTAL_CODE: '94105',
+							SHIPPING_COUNTRY: 'USA',
+							LAST_UPDATED_DATE: '2024-01-15T10:30:00Z',
+							CREATED_DATE: '2023-01-01T00:00:00Z',
+							STATUS: 'ACTIVE'
+						},
+						{
+							ACCOUNT_ID: 'ACC002',
+							ACCOUNT_NAME: 'Test Account 2',
+							ACCOUNT_NUMBER: '67890',
+							ACCOUNT_TYPE: 'Prospect',
+							INDUSTRY: 'Finance',
+							ANNUAL_REVENUE: 2000000,
+							NUMBER_OF_EMPLOYEES: 200,
+							PHONE: '555-9876',
+							FAX: '555-4321',
+							WEBSITE: 'https://test2.com',
+							DESCRIPTION: 'Test account 2',
+							BILLING_STREET: '456 Oak Ave',
+							BILLING_CITY: 'Los Angeles',
+							BILLING_STATE: 'CA',
+							BILLING_POSTAL_CODE: '90001',
+							BILLING_COUNTRY: 'USA',
+							SHIPPING_STREET: '456 Oak Ave',
+							SHIPPING_CITY: 'Los Angeles',
+							SHIPPING_STATE: 'CA',
+							SHIPPING_POSTAL_CODE: '90001',
+							SHIPPING_COUNTRY: 'USA',
+							LAST_UPDATED_DATE: '2024-01-16T11:00:00Z',
+							CREATED_DATE: '2023-02-01T00:00:00Z',
+							STATUS: 'ACTIVE'
+						}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Salesforce Upsert -->
+			<munit-tools:mock-when processor="salesforce:upsert" doc:name="Mock Salesforce Upsert">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Upsert Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{id: '001ABC123', successful: true, created: true},
+						{id: '001ABC456', successful: true, created: false}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Watermark Store -->
+			<munit-tools:mock-when processor="os:store" doc:name="Mock Watermark Store">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Store Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Lock Release -->
+			<munit-tools:mock-when processor="os:remove" doc:name="Mock Lock Remove">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Remove Lock" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<flow-ref name="oracle-salesforce-accounts-sync-scheduler-flow" doc:name="Execute Scheduler Flow"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="db:select" times="1" doc:name="Verify Oracle Select Called"/>
+			<munit-tools:verify-call processor="salesforce:upsert" doc:name="Verify Salesforce Upsert Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Scheduler Flow with No Records -->
+	<munit:test name="scheduler-flow-no-records-test" 
+		doc:id="test-scheduler-no-records"
+		description="Test scheduler flow when no records are found">
+		
+		<munit:behavior>
+			<!-- Mock Lock Acquisition -->
+			<munit-tools:mock-when processor="os:store" doc:name="Mock Lock Store">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Store Lock" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Watermark Retrieval -->
+			<munit-tools:mock-when processor="os:retrieve" doc:name="Mock Watermark Retrieve">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Retrieve Watermark" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#['2024-01-01T00:00:00Z']"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Oracle Database Select - Empty Result -->
+			<munit-tools:mock-when processor="db:select" doc:name="Mock Oracle Select Empty">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Select Oracle Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock Lock Release -->
+			<munit-tools:mock-when processor="os:remove" doc:name="Mock Lock Remove">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Remove Lock" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[null]"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<flow-ref name="oracle-salesforce-accounts-sync-scheduler-flow" doc:name="Execute Scheduler Flow"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="db:select" times="1" doc:name="Verify Oracle Select Called"/>
+			<munit-tools:verify-call processor="salesforce:upsert" times="0" doc:name="Verify Salesforce Upsert Not Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Scheduler Flow Lock Already Acquired -->
+	<munit:test name="scheduler-flow-lock-exists-test" 
+		doc:id="test-scheduler-lock-exists"
+		description="Test scheduler flow when lock already exists">
+		
+		<munit:behavior>
+			<!-- Mock Lock Acquisition - Throws KEY_ALREADY_EXISTS -->
+			<munit-tools:mock-when processor="os:store" doc:name="Mock Lock Store Fails">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Store Lock" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="OS:KEY_ALREADY_EXISTS"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<flow-ref name="oracle-salesforce-accounts-sync-scheduler-flow" doc:name="Execute Scheduler Flow"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="db:select" times="0" doc:name="Verify Oracle Select Not Called"/>
+			<munit-tools:verify-call processor="salesforce:upsert" times="0" doc:name="Verify Salesforce Upsert Not Called"/>
+		</munit:validation>
+	</munit:test>
+
+</mule>

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- Sub-Flow: Upsert Salesforce Accounts -->
+	<sub-flow name="sub-flow-upsert-salesforce-accounts" doc:name="Upsert Salesforce Accounts">
+		<logger level="DEBUG" 
+			doc:name="Log Upsert Start" 
+			message='#["[" ++ vars.correlationId ++ "] Upserting " ++ sizeOf(payload) ++ " accounts to Salesforce"]' 
+			category="${logging.category}"/>
+
+		<!-- Upsert to Salesforce using External ID -->
+		<salesforce:upsert doc:name="Upsert Accounts" 
+			config-ref="Salesforce_Config" 
+			objectType="${salesforce.objectType}" 
+			externalIdFieldName="${salesforce.externalIdField}">
+			<salesforce:records><![CDATA[#[payload]]]></salesforce:records>
+		</salesforce:upsert>
+
+		<!-- Process Upsert Results -->
+		<ee:transform doc:name="Process Upsert Results">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+var results = payload default []
+---
+{
+	totalRecords: sizeOf(results),
+	successCount: sizeOf(results filter $.successful == true),
+	failureCount: sizeOf(results filter $.successful == false),
+	failures: results filter $.successful == false map {
+		id: $.id,
+		errors: $.errors default []
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+
+		<!-- Log Upsert Results -->
+		<logger level="INFO" 
+			doc:name="Log Upsert Results" 
+			message='#["[" ++ vars.correlationId ++ "] Salesforce upsert complete - Success: " ++ payload.successCount ++ ", Failed: " ++ payload.failureCount]' 
+			category="${logging.category}"/>
+
+		<!-- Log Failures if Any -->
+		<choice doc:name="Check Failures">
+			<when expression="#[payload.failureCount > 0]">
+				<logger level="WARN" 
+					doc:name="Log Failure Details" 
+					message='#["[" ++ vars.correlationId ++ "] Upsert failures: " ++ write(payload.failures, "application/json")]' 
+					category="${logging.category}"/>
+			</when>
+			<otherwise>
+				<logger level="DEBUG" 
+					doc:name="Log All Success" 
+					message='#["[" ++ vars.correlationId ++ "] All records upserted successfully"]' 
+					category="${logging.category}"/>
+			</otherwise>
+		</choice>
+	</sub-flow>
+
+</mule>

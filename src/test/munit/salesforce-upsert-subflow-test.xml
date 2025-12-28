@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<munit:config name="salesforce-upsert-subflow-test-suite.xml"/>
+
+	<!-- Test: Salesforce Upsert Success -->
+	<munit:test name="salesforce-upsert-success-test" 
+		doc:id="test-sf-upsert-success"
+		description="Test Salesforce upsert subflow executes successfully">
+		
+		<munit:behavior>
+			<!-- Mock Salesforce Upsert -->
+			<munit-tools:mock-when processor="salesforce:upsert" doc:name="Mock Salesforce Upsert">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Upsert Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{id: '001ABC123', successful: true, created: true},
+						{id: '001ABC456', successful: true, created: false}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-payload value="#[[
+				{Oracle_Account_Id__c: 'ACC001', Name: 'Test Account 1', AccountNumber: '12345'},
+				{Oracle_Account_Id__c: 'ACC002', Name: 'Test Account 2', AccountNumber: '67890'}
+			]]" doc:name="Set Test Payload" mediaType="application/java"/>
+			<flow-ref name="sub-flow-upsert-salesforce-accounts" doc:name="Execute Salesforce Upsert"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Success Count" 
+				expression="#[payload.successCount]" 
+				is="#[MunitTools::equalTo(2)]"/>
+			<munit-tools:assert-that doc:name="Assert Failure Count" 
+				expression="#[payload.failureCount]" 
+				is="#[MunitTools::equalTo(0)]"/>
+			<munit-tools:verify-call processor="salesforce:upsert" times="1" doc:name="Verify Upsert Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Salesforce Upsert Partial Failure -->
+	<munit:test name="salesforce-upsert-partial-failure-test" 
+		doc:id="test-sf-upsert-partial"
+		description="Test Salesforce upsert subflow handles partial failures">
+		
+		<munit:behavior>
+			<!-- Mock Salesforce Upsert with Partial Failure -->
+			<munit-tools:mock-when processor="salesforce:upsert" doc:name="Mock Salesforce Upsert Partial">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Upsert Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{id: '001ABC123', successful: true, created: true},
+						{id: null, successful: false, errors: [{message: 'Required field missing', statusCode: 'REQUIRED_FIELD_MISSING'}]}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-payload value="#[[
+				{Oracle_Account_Id__c: 'ACC001', Name: 'Test Account 1', AccountNumber: '12345'},
+				{Oracle_Account_Id__c: 'ACC002', Name: null, AccountNumber: '67890'}
+			]]" doc:name="Set Test Payload" mediaType="application/java"/>
+			<flow-ref name="sub-flow-upsert-salesforce-accounts" doc:name="Execute Salesforce Upsert"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Success Count" 
+				expression="#[payload.successCount]" 
+				is="#[MunitTools::equalTo(1)]"/>
+			<munit-tools:assert-that doc:name="Assert Failure Count" 
+				expression="#[payload.failureCount]" 
+				is="#[MunitTools::equalTo(1)]"/>
+			<munit-tools:assert-that doc:name="Assert Failures Array" 
+				expression="#[sizeOf(payload.failures)]" 
+				is="#[MunitTools::equalTo(1)]"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Salesforce Upsert Connectivity Error -->
+	<munit:test name="salesforce-upsert-connectivity-error-test" 
+		doc:id="test-sf-upsert-error"
+		description="Test Salesforce upsert subflow handles connectivity error"
+		expectedErrorType="SALESFORCE:CONNECTIVITY">
+		
+		<munit:behavior>
+			<!-- Mock Salesforce Upsert - Throws Error -->
+			<munit-tools:mock-when processor="salesforce:upsert" doc:name="Mock Salesforce Upsert Error">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Upsert Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="SALESFORCE:CONNECTIVITY"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-payload value="#[[
+				{Oracle_Account_Id__c: 'ACC001', Name: 'Test Account 1', AccountNumber: '12345'}
+			]]" doc:name="Set Test Payload" mediaType="application/java"/>
+			<flow-ref name="sub-flow-upsert-salesforce-accounts" doc:name="Execute Salesforce Upsert"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="salesforce:upsert" times="1" doc:name="Verify Upsert Called"/>
+		</munit:validation>
+	</munit:test>
+
+	<!-- Test: Salesforce Upsert All Failures -->
+	<munit:test name="salesforce-upsert-all-failures-test" 
+		doc:id="test-sf-upsert-all-fail"
+		description="Test Salesforce upsert subflow handles all records failing">
+		
+		<munit:behavior>
+			<!-- Mock Salesforce Upsert - All Failures -->
+			<munit-tools:mock-when processor="salesforce:upsert" doc:name="Mock Salesforce Upsert All Fail">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute whereValue="Upsert Accounts" attributeName="doc:name"/>
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[[
+						{id: null, successful: false, errors: [{message: 'Invalid field', statusCode: 'INVALID_FIELD'}]},
+						{id: null, successful: false, errors: [{message: 'Duplicate value', statusCode: 'DUPLICATE_VALUE'}]}
+					]]" mediaType="application/java"/>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<set-variable variableName="correlationId" value="#[uuid()]" doc:name="Set Correlation ID"/>
+			<set-payload value="#[[
+				{Oracle_Account_Id__c: 'ACC001', Name: 'Test Account 1'},
+				{Oracle_Account_Id__c: 'ACC002', Name: 'Test Account 2'}
+			]]" doc:name="Set Test Payload" mediaType="application/java"/>
+			<flow-ref name="sub-flow-upsert-salesforce-accounts" doc:name="Execute Salesforce Upsert"/>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that doc:name="Assert Success Count Zero" 
+				expression="#[payload.successCount]" 
+				is="#[MunitTools::equalTo(0)]"/>
+			<munit-tools:assert-that doc:name="Assert Failure Count" 
+				expression="#[payload.failureCount]" 
+				is="#[MunitTools::equalTo(2)]"/>
+		</munit:validation>
+	</munit:test>
+
+</mule>

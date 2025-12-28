@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+		http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+		http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+		http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+
+	<!-- Global Property for Environment -->
+	<global-property name="mule.env" value="dev" doc:name="Environment Property"/>
+	<global-property name="encryption.key" value="mule4encryptionkey" doc:name="Encryption Key"/>
+
+	<!-- Secure Properties Configuration -->
+	<secure-properties:config name="Secure_Properties_Config" 
+		doc:name="Secure Properties Config" 
+		file="application-secure.yaml" 
+		key="${encryption.key}">
+		<secure-properties:encrypt algorithm="AES" mode="CBC"/>
+	</secure-properties:config>
+
+	<!-- Application Properties Configuration -->
+	<configuration-properties doc:name="Application Properties" file="application.yaml"/>
+
+	<!-- Global Configuration with Default Error Handler Reference -->
+	<configuration defaultErrorHandler-ref="Global_Error_Handler" doc:name="Global Configuration"/>
+
+	<!-- Oracle Database Configuration -->
+	<db:config name="Oracle_Database_Config" doc:name="Oracle Database Config">
+		<db:oracle-connection 
+			host="${oracle.host}" 
+			port="${oracle.port}" 
+			user="${secure::oracle.user}" 
+			password="${secure::oracle.password}" 
+			serviceName="${oracle.serviceName}">
+			<reconnection failsDeployment="true">
+				<reconnect frequency="5000" count="5"/>
+			</reconnection>
+			<db:pooling-profile 
+				minPoolSize="${oracle.pool.minSize}" 
+				maxPoolSize="${oracle.pool.maxSize}" 
+				acquireIncrement="${oracle.pool.acquireIncrement}" 
+				maxWait="${oracle.pool.maxWait}" 
+				maxWaitUnit="SECONDS"/>
+		</db:oracle-connection>
+	</db:config>
+
+	<!-- Salesforce Configuration -->
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config">
+		<salesforce:basic-connection 
+			username="${secure::salesforce.username}" 
+			password="${secure::salesforce.password}" 
+			securityToken="${secure::salesforce.token}" 
+			url="${salesforce.url}">
+			<reconnection failsDeployment="true">
+				<reconnect frequency="3000" count="3"/>
+			</reconnection>
+		</salesforce:basic-connection>
+	</salesforce:sfdc-config>
+
+	<!-- Object Store for Watermark Management -->
+	<os:object-store name="Watermark_Object_Store" 
+		doc:name="Watermark Object Store"
+		persistent="true" 
+		maxEntries="100" 
+		entryTtl="365" 
+		entryTtlUnit="DAYS" 
+		expirationInterval="1" 
+		expirationIntervalUnit="HOURS"/>
+
+	<!-- Object Store for Execution Lock (Single Execution) -->
+	<os:object-store name="Lock_Object_Store" 
+		doc:name="Lock Object Store"
+		persistent="true" 
+		maxEntries="10" 
+		entryTtl="${lock.ttl}" 
+		entryTtlUnit="SECONDS" 
+		expirationInterval="60" 
+		expirationIntervalUnit="SECONDS"/>
+
+	<!-- Object Store for Dead Letter Records -->
+	<os:object-store name="DeadLetter_Object_Store" 
+		doc:name="Dead Letter Object Store"
+		persistent="true" 
+		maxEntries="10000" 
+		entryTtl="30" 
+		entryTtlUnit="DAYS" 
+		expirationInterval="1" 
+		expirationIntervalUnit="HOURS"/>
+
+</mule>

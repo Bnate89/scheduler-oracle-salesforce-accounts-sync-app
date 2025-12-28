@@ -1,0 +1,52 @@
+# Oracle to Salesforce Accounts Incremental Sync - Application Configuration
+# Non-sensitive configuration properties
+
+# Scheduler Configuration
+scheduler:
+  state: "started"
+  cron:
+    expression: "0 0/30 * * * ?"
+    timezone: "UTC"
+  startDelay: "10"
+
+# Oracle Database Configuration
+oracle:
+  host: "oracle-db.example.com"
+  port: "1521"
+  serviceName: "ORCL"
+  pool:
+    minSize: "5"
+    maxSize: "20"
+    acquireIncrement: "1"
+    maxWait: "30"
+
+# Salesforce Configuration
+salesforce:
+  url: "https://login.salesforce.com/services/Soap/u/59.0"
+  objectType: "Account"
+  externalIdField: "Oracle_Account_Id__c"
+
+# Batch Processing Configuration
+batch:
+  size: "200"
+  blockSize: "100"
+
+# Watermark Configuration
+watermark:
+  key: "oracle-sf-accounts-last-sync"
+  defaultDate: "2020-01-01T00:00:00Z"
+
+# Lock Configuration (for single execution)
+lock:
+  key: "oracle-sf-accounts-sync-lock"
+  ttl: "3600"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  category: "com.oracle.salesforce.sync"
+
+# Feature Toggles
+features:
+  enableBatchProcessing: "true"
+  enableDeadLetterLogging: "true"

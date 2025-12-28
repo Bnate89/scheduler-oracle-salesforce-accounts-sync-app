@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- Sub-Flow: Fetch Oracle Accounts (Incremental) -->
+	<sub-flow name="sub-flow-fetch-oracle-accounts" doc:name="Fetch Oracle Accounts">
+		<logger level="DEBUG" 
+			doc:name="Log Fetch Start" 
+			message='#["[" ++ vars.correlationId ++ "] Fetching Oracle accounts modified after: " ++ vars.lastWatermark]' 
+			category="${logging.category}"/>
+		
+		<!-- Query Oracle for Incremental Records -->
+		<db:select doc:name="Select Oracle Accounts" config-ref="Oracle_Database_Config">
+			<db:sql><![CDATA[
+				SELECT 
+					ACCOUNT_ID,
+					ACCOUNT_NAME,
+					ACCOUNT_NUMBER,
+					ACCOUNT_TYPE,
+					INDUSTRY,
+					ANNUAL_REVENUE,
+					NUMBER_OF_EMPLOYEES,
+					PHONE,
+					FAX,
+					WEBSITE,
+					DESCRIPTION,
+					BILLING_STREET,
+					BILLING_CITY,
+					BILLING_STATE,
+					BILLING_POSTAL_CODE,
+					BILLING_COUNTRY,
+					SHIPPING_STREET,
+					SHIPPING_CITY,
+					SHIPPING_STATE,
+					SHIPPING_POSTAL_CODE,
+					SHIPPING_COUNTRY,
+					LAST_UPDATED_DATE,
+					CREATED_DATE,
+					STATUS
+				FROM ACCOUNTS
+				WHERE LAST_UPDATED_DATE > :lastWatermark
+					AND STATUS = 'ACTIVE'
+				ORDER BY LAST_UPDATED_DATE ASC
+			]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+				lastWatermark: vars.lastWatermark as DateTime
+			}]]]></db:input-parameters>
+		</db:select>
+
+		<logger level="DEBUG" 
+			doc:name="Log Fetch Complete" 
+			message='#["[" ++ vars.correlationId ++ "] Fetched " ++ sizeOf(payload) ++ " Oracle accounts"]' 
+			category="${logging.category}"/>
+	</sub-flow>
+
+</mule>

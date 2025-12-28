@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration status="WARN">
+
+    <!-- Oracle to Salesforce Accounts Sync - Production Logging Configuration -->
+
+    <Appenders>
+        <!-- Rolling File Appender for Application Logs -->
+        <RollingFile name="file" 
+            fileName="${sys:mule.home}${sys:file.separator}logs${sys:file.separator}oracle-salesforce-accounts-sync.log"
+            filePattern="${sys:mule.home}${sys:file.separator}logs${sys:file.separator}oracle-salesforce-accounts-sync-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout pattern="%-5p %d{yyyy-MM-dd HH:mm:ss.SSS} [%t] [correlationId: %X{correlationId}] [processor: %X{processorPath}] %c{1}: %m%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="50 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30"/>
+        </RollingFile>
+
+        <!-- Console Appender -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%-5p %d{yyyy-MM-dd HH:mm:ss.SSS} [%t] [correlationId: %X{correlationId}] %c{1}: %m%n"/>
+        </Console>
+
+        <!-- Error Log Appender -->
+        <RollingFile name="errorFile" 
+            fileName="${sys:mule.home}${sys:file.separator}logs${sys:file.separator}oracle-salesforce-accounts-sync-error.log"
+            filePattern="${sys:mule.home}${sys:file.separator}logs${sys:file.separator}oracle-salesforce-accounts-sync-error-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout pattern="%-5p %d{yyyy-MM-dd HH:mm:ss.SSS} [%t] [correlationId: %X{correlationId}] [processor: %X{processorPath}] %c{1}: %m%n%ex"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="50 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30"/>
+            <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Application Logger -->
+        <AsyncLogger name="com.oracle.salesforce.sync" level="INFO" additivity="false">
+            <AppenderRef ref="file"/>
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="errorFile"/>
+        </AsyncLogger>
+
+        <!-- HTTP Logger - Suppress verbose traffic -->
+        <AsyncLogger name="org.mule.service.http" level="WARN"/>
+        <AsyncLogger name="org.mule.extension.http" level="WARN"/>
+
+        <!-- Database Connector Logger -->
+        <AsyncLogger name="org.mule.extension.db" level="WARN"/>
+
+        <!-- Salesforce Connector Logger -->
+        <AsyncLogger name="org.mule.extension.salesforce" level="WARN"/>
+
+        <!-- Object Store Logger -->
+        <AsyncLogger name="org.mule.extension.objectstore" level="WARN"/>
+
+        <!-- Batch Processing Logger -->
+        <AsyncLogger name="org.mule.runtime.core.internal.processor.strategy" level="WARN"/>
+
+        <!-- Mule Core Logger -->
+        <AsyncLogger name="org.mule.runtime.core.internal.processor.LoggerMessageProcessor" level="INFO"/>
+
+        <!-- Root Logger -->
+        <AsyncRoot level="INFO">
+            <AppenderRef ref="file"/>
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="errorFile"/>
+        </AsyncRoot>
+    </Loggers>
+
+</Configuration>
